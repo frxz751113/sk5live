@@ -12,6 +12,7 @@
  * - 增强错误处理
  * - 【新增】详细区分SOCKS5代理超时和URL访问超时
  * - 【新增】识别SOCKS5代理认证失败
+ * - 【新增】支持 POST 和 HEAD 请求方法
  */
 
 ob_start();
@@ -174,6 +175,7 @@ $proxy_password = trim($data['proxy_password'] ?? '');
 $follow_redirects = (bool)($data['follow_redirects'] ?? true);
 $max_redirects = max(0, min(50, (int)($data['max_redirects'] ?? 10)));
 $request_headers = (array)($data['headers'] ?? []);
+$post_data = $data['post_data'] ?? '';
 
 logRequest("收到请求", [
     'url' => $url,
@@ -182,7 +184,8 @@ logRequest("收到请求", [
     'has_proxy' => !empty($proxy_address),
     'proxy' => $proxy_address ?: '无',
     'follow_redirects' => $follow_redirects,
-    'max_redirects' => $max_redirects
+    'max_redirects' => $max_redirects,
+    'has_post_data' => !empty($post_data)
 ]);
 
 try {
@@ -196,7 +199,8 @@ try {
         $proxy_username,
         $proxy_password,
         $follow_redirects,
-        $max_redirects
+        $max_redirects,
+        $post_data
     );
     
     if (!is_array($result)) {
@@ -446,14 +450,14 @@ function generateSuggestedFilename($url, $contentType, $headers) {
                 if (file_put_contents($cachePath, json_encode([
                     'body' => $result['body'],
                     'headers' => $result['headers'],
-                    'suggested_filename' => $suggestedFilename,  // 添加建议的文件名
+                    'suggested_filename' => $suggestedFilename,
                     'original_url' => $result['final_url'] ?? $url
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))) {
                     // 替换生成下载链接的部分
 $script_name = basename($_SERVER['PHP_SELF']);
 $result['download_url'] = $script_name . '?download=' . $cacheId;
                     $result['download_available'] = true;
-                    $result['suggested_filename'] = $suggestedFilename;  // 添加到结果中
+                    $result['suggested_filename'] = $suggestedFilename;
                     cleanupOldCacheFiles(300);
                 }
             }
@@ -465,7 +469,7 @@ $result['download_url'] = $script_name . '?download=' . $cacheId;
                 if (file_put_contents($cachePath, json_encode([
                     'body' => $result['body'],
                     'headers' => $result['headers'],
-                    'suggested_filename' => $suggestedFilename,  // 添加建议的文件名
+                    'suggested_filename' => $suggestedFilename,
                     'original_url' => $result['final_url'] ?? $url
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))) {
                     // 替换生成下载链接的部分
@@ -474,7 +478,7 @@ $result['download_url'] = $script_name . '?download=' . $cacheId;
                     $result['body'] = substr($result['body'], 0, 2000) . "\n\n... (响应体超过2000字符，已截断前2000字符，请下载完整文件查看) ...";
                     $result['truncated'] = true;
                     $result['download_available'] = true;
-                    $result['suggested_filename'] = $suggestedFilename;  // 添加到结果中
+                    $result['suggested_filename'] = $suggestedFilename;
                     cleanupOldCacheFiles(300);
                 } else {
                     $result['body'] = substr($result['body'], 0, 2000) . "\n\n... (响应体超过2000字符，已截断前2000字符，但无法生成下载链接) ...";
@@ -515,7 +519,7 @@ $result['download_url'] = $script_name . '?download=' . $cacheId;
         'curl_error_code' => null,
         'curl_error_message' => null,
         'proxy_used' => false,
-        'suggested_filename' => $suggestedFilename  // 确保有这个字段
+        'suggested_filename' => $suggestedFilename
     ], $result);
     
     logRequest("请求完成", [
@@ -578,7 +582,7 @@ function extractProxyAuthError($body) {
 
 // 修改executeRequest函数中的DNS解析部分
 
-function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $proxy_address, $proxy_username, $proxy_password, $follow_redirects, $max_redirects) {
+function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $proxy_address, $proxy_username, $proxy_password, $follow_redirects, $max_redirects, $post_data = '') {
     $redirects = [];
     $redirect_count = 0;
     $current_url = $url;
@@ -710,14 +714,26 @@ function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $p
             CURLOPT_FAILONERROR => false,
         ];
         
-        // 强制IPv4解析（影响代理服务器和目标服务器的连接）
-        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        // 如果是 POST 方法，添加请求体
+        if ($method === 'POST' && !empty($post_data)) {
+            $curlOptions[CURLOPT_POST] = true;
+            $curlOptions[CURLOPT_POSTFIELDS] = $post_data;
+        }
         
-        if ($isMediaUrl) {
+        // 如果是 HEAD 方法，不获取响应体
+        if ($method === 'HEAD') {
+            $curlOptions[CURLOPT_NOBODY] = true;
+        }
+        
+        // 对于媒体文件，使用 HEAD 方法
+        if ($isMediaUrl && $method !== 'HEAD') {
             $curlOptions[CURLOPT_NOBODY] = true;
             $curlOptions[CURLOPT_CUSTOMREQUEST] = 'HEAD';
         }
-
+        
+        // 强制IPv4解析（影响代理服务器和目标服务器的连接）
+        curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+        
         curl_setopt_array($ch, $curlOptions);
 
         if ($proxy_address) {
@@ -824,7 +840,7 @@ function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $p
         } else {
             $header_size = $info['header_size'];
             $header_str = substr($resp, 0, $header_size);
-            $body = $isMediaUrl ? '' : substr($resp, $header_size);
+            $body = $isMediaUrl && $method !== 'HEAD' ? '' : substr($resp, $header_size);
             $headers = parseHeaders($header_str);
             $status_code = $info['http_code'];
             
@@ -868,7 +884,7 @@ function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $p
                 'curl_error_code' => $errno,
                 'curl_error_message' => $error,
                 'proxy_used' => !empty($proxy_address),
-                'dns_resolved' => $dnsResolved, // 添加DNS解析信息
+                'dns_resolved' => $dnsResolved,
                 'resolved_ip' => $resolvedIp
             ];
         }
@@ -913,7 +929,7 @@ function executeRequest($url, $method, $request_headers, $hostsMap, $timeout, $p
         'curl_error_code' => null,
         'curl_error_message' => null,
         'proxy_used' => !empty($proxy_address),
-        'dns_resolved' => $dnsResolved, // 添加DNS解析信息
+        'dns_resolved' => $dnsResolved,
         'resolved_ip' => $resolvedIp
     ];
 }

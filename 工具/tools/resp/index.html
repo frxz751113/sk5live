@@ -7,7 +7,7 @@
     <title>响应测试工具-直播源响应情况查看</title>
         <!-- Favicon (使用内嵌SVG) -->
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='28' fill='%232196f3'/><path d='M28.5 19l-2.84 9.92L19 30l11 17 2.84-9.92L45 34l-11-17z' fill='white' stroke='white' stroke-width='1'/></svg>">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,14 +28,18 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="url">请求URL (直播源地址)</label>
-                    <div class="url-input-group">
-                        <select id="method" disabled>
-                            <option value="GET">GET</option>
-                        </select>
-                        <input type="text" id="url" placeholder="http://...">
-                    </div>
-                </div>
+    <label for="url">请求URL (直播源地址)</label>
+    <div class="url-input-group">
+        <div class="select-badge-wrapper" id="method-wrapper">
+            <select id="method">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="HEAD">HEAD</option>
+            </select>
+        </div>
+        <input type="text" id="url" placeholder="请输入 http:// 或 https:// 开头的完整 URL">
+    </div>
+</div>
                 
                 <div class="form-row">
                     <div class="form-group">
@@ -56,7 +60,7 @@ cdn.example.com 5.6.7.8"></textarea>
                     <div class="compact-group-title" id="headers-toggle">
                         <div>
                             <i class="fas fa-heading"></i>
-                            自定义请求头
+                            请求头设置
                         </div>
                         <i class="fas fa-chevron-down compact-group-arrow"></i>
                     </div>
@@ -81,8 +85,17 @@ cdn.example.com 5.6.7.8"></textarea>
 
                         
                         <div class="form-group">
-                            <label for="other-headers">其他请求头</label>
+                            <label for="other-headers">Headers</label>
                             <textarea id="other-headers" placeholder="Accept: */*&#10;Accept-Language: zh-CN,zh;q=0.9" rows="2"></textarea>
+                        </div>
+
+                        <!-- POST 请求体输入框 -->
+                        <div class="form-group" id="post-body-group" style="display: none;">
+                            <label for="post-body">Body</label>
+                            <textarea id="post-body" placeholder="key1=value1&key2=value2&#10;或 JSON: {&quot;key&quot;: &quot;value&quot;}" rows="3"></textarea>
+                            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -161,7 +161,7 @@ textarea {
 
 .url-input-group select {
     flex: 0 0 auto;
-    width: 80px;
+    width: 60px;
     border-radius: 6px 0 0 6px;
     border-right: none;
     background-color: #eaeaea;
@@ -1569,4 +1569,149 @@ textarea {
     .status-proxy-error {
         background-color: #ff8a65 !important;
     }
+}
+
+/* ==========================================================================
+   精美自定义 URL 输入框（带请求方法小胶囊）
+   ========================================================================== */
+
+/* 1. 外层大输入框组合框容器 */
+.url-input-group {
+    display: flex !important;
+    align-items: center !important;
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 8px !important;
+    padding: 4px 4px !important; /* 内边距给内部胶囊留出“呼吸感” */
+    background-color: #ffffff !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    box-shadow: none !important; /* 彻底清除可能存在的全局阴影 */
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+/* 2. 当整个组合框被聚焦时，整体外框高亮（颜色由 JS 动态控制） */
+.url-input-group:focus-within {
+    /* 如果 JS 还没加载完，默认降级显示橙色 */
+    border-color: var(--focus-color, #ef6820) !important;
+    box-shadow: var(--focus-shadow, 0 0 0 2px rgba(239, 104, 32, 0.15)) !important;
+}
+
+/* 3. 左侧不铺满的独立小胶囊包裹层 */
+.select-badge-wrapper {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 6px !important; 
+    padding: 0 8px 0 8px !important; /* 关键修改：右边距从 8px 改为 24px，给新箭头留出空间 */
+    height: 32px !important;       
+    margin-right: 8px !important;  
+    transition: all 0.2s ease !important;
+    background-color: #fdede4;     
+    box-sizing: border-box !important;
+    position: relative !important;  /* 关键：为了让伪元素箭头绝对定位 */
+}
+
+/* 核心新增：用 CSS 纯手工画一个优雅的下箭头 */
+.select-badge-wrapper::after {
+    content: "";
+    position: absolute;
+    right: 8px;                  /* 靠右对齐 */
+    top: 42%;
+    transform: translateY(-35%) rotate(45deg); /* 旋转 45 度做成 V 字形 */
+    width: 5px;
+    height: 5px;
+    border-right: 2px solid currentColor; /* 颜色自动跟随文字颜色（GET绿/POST橙/HEAD粉） */
+    border-bottom: 2px solid currentColor;
+    pointer-events: none;        /* 穿透点击，点击箭头也能触发下拉 */
+}
+
+/* 4. 彻底透明、脱去原生外壳的 select 标签 */
+.select-badge-wrapper select {
+    border: none !important;
+    outline: none !important;
+    background: transparent !important; /* 必须透明，才能露出父级的胶囊背景 */
+    cursor: pointer !important;
+    font-weight: 700 !important;
+    font-size: 14px !important;
+    padding: 0 4px !important;
+    height: 100% !important;
+    color: #ef6820; /* 默认初始化为 POST 的深橙色 */
+    box-shadow: none !important;
+    -webkit-appearance: none; /* 去除 iOS 默认外观 */
+    appearance: none;         /* 如果你想保留默认下拉小箭头，可以删掉这两行 */
+}
+
+/* 5. 右侧主输入框 */
+.url-input-group input[type="text"] {
+    flex: 1 !important;
+    border: none !important;          /* 掐断自带边框 */
+    outline: none !important;         /* 掐断聚焦蓝框 */
+    background: transparent !important;
+    padding: 6px 4px !important;
+    font-size: 14px !important;
+    color: #333333 !important;
+    box-shadow: none !important;      /* 掐断全局可能赋予的内部投影 */
+    height: auto !important;
+}
+
+/* 修改占位符文字颜色 */
+.url-input-group input::placeholder {
+    color: #bfbfbf !important;
+}
+
+/* 彻底清除 select 被点击激活时的系统自带高亮黑圈/蓝边框 */
+#method:focus,
+#method:active {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 强行控制下拉菜单展开后：背景统一为纯白，只有字体带颜色 */
+#method option {
+    background-color: #ffffff !important; /* 统一成干净的白色背景 */
+    font-weight: 700 !important;          /* 字体加粗 */
+}
+
+#method option[value="GET"] {
+    color: #17b26a !important;            /* GET 绿色字体 */
+}
+
+#method option[value="POST"] {
+    color: #ef6820 !important;            /* POST 橙色字体 */
+}
+
+#method option[value="HEAD"] {
+    color: #ee46bc !important;            /* HEAD 粉色字体 */
+}
+
+/* 历史记录 URL 行 - 方法标签和 URL 在同一行 */
+.history-url-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 3px;
+    width: 100%;
+}
+
+.history-url-row .history-url {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    font-weight: 400;
+    color: var(--primary-color);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+}
+
+/* 方法标签样式 */
+.history-method-badge {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 4px;
+    line-height: 1.6;
 }

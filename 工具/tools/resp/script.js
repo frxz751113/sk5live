@@ -18,13 +18,75 @@ document.addEventListener('DOMContentLoaded', function() {
     const MAX_HISTORY_ITEMS = 50;
     const VISIBLE_HISTORY_ITEMS = 5;
 
+    const methodSelect = document.getElementById('method');
+const methodWrapper = document.getElementById('method-wrapper'); 
+// 新增：获取最外层的大组合框容器（假设它的 class 是 url-input-group）
+const inputGroup = document.querySelector('.url-input-group'); 
+
+if (methodSelect) {
+    const colorMap = {
+        'GET': { color: '#17b26a', bg: '#d1f0e1', shadowRaw: '46, 125, 50' },
+        'POST': { color: '#ef6820', bg: '#fdede4', shadowRaw: '255, 73, 0' },
+        'HEAD': { color: '#ee46bc', bg: '#fde9f7', shadowRaw: '255, 107, 107' }
+    };
+    
+    function updateMethodStyle(select) {
+    const value = select.value;
+    const style = colorMap[value];
+    if (style) {
+        if (methodWrapper) {
+            // 1. 改变小胶囊包裹层的背景色
+            methodWrapper.style.backgroundColor = style.bg;
+            // 2. 关键修改：把文字颜色加在外层包裹层上！这样::after箭头才能拿到 currentColor
+            methodWrapper.style.color = style.color; 
+        }
+        
+        if (inputGroup) {
+            inputGroup.style.setProperty('--focus-color', style.color);
+            inputGroup.style.setProperty('--focus-shadow', `0 0 0 2px rgba(${style.shadowRaw}, 0.15)`);
+        }
+        
+        // 3. 让 select 本身的背景保持透明，文字颜色继承父级即可
+        select.style.backgroundColor = 'transparent'; 
+        select.style.color = 'inherit'; // 或者是 style.color
+        
+        // 保持你原本的 class 逻辑
+        select.className = 'method-badge';
+    }
+}
+    
+    methodSelect.addEventListener('change', function() {
+        updateMethodStyle(this);
+        // 显示/隐藏 POST 请求体
+        if (this.value === 'POST') {
+            if (postBodyGroup) postBodyGroup.style.display = 'block';
+        } else {
+            if (postBodyGroup) postBodyGroup.style.display = 'none';
+        }
+    });
+    
+    // 初始应用
+    updateMethodStyle(methodSelect);
+}
+    const postBodyGroup = document.getElementById('post-body-group');
+
+    if (methodSelect && postBodyGroup) {
+        methodSelect.addEventListener('change', function() {
+            if (this.value === 'POST') {
+                postBodyGroup.style.display = 'block';
+            } else {
+                postBodyGroup.style.display = 'none';
+            }
+        });
+    }
+
     function checkBackendConnection(context = '') {
         const contextText = context ? `(${context})` : '';
         
         return fetch('api.php', { method: 'HEAD' })
             .then(res => {
                 if (res.ok) {
-                    addLog(`PHP代理后端连接正常 ${contextText}`, 'success');
+                    addLog(`工具初始化完成 ${contextText}`, 'success');
                     return true;
                 } else {
                     addLog(`PHP代理后端连接失败${contextText}，状态码: ${res.status}`, 'error');
@@ -47,6 +109,7 @@ document.addEventListener('DOMContentLoaded', function() {
             url: config.url,
             config: {
                 url: config.url,
+                method: config.method || 'GET',
                 host: config.host || '',
                 userAgent: config.headers['User-Agent'] || '',
                 referer: config.headers['Referer'] || '',
@@ -56,7 +119,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 proxyUsername: config.proxy_username || '',
                 proxyPassword: config.proxy_password || '',
                 followRedirects: config.follow_redirects ? 'auto' : 'none',
-                maxRedirects: config.max_redirects || 10
+                maxRedirects: config.max_redirects || 10,
+                postData: config.post_data || ''
             },
             result: {
                 status: result.status_code || 0,
@@ -134,160 +198,173 @@ function loadHistory() {
     }
 
     function updateHistoryDisplay(history) {
-        historyList.innerHTML = '';
-        
-        if (history.length === 0) {
-            historyList.innerHTML = `
-                <div class="history-item placeholder">
-                    <div class="history-url">暂无请求历史</div>
-                </div>`;
-            return;
-        }
-        
-        const historyContainer = document.createElement('div');
-        historyContainer.className = 'history-container';
-        
-        history.forEach((item, index) => {
-            const itemEl = document.createElement('div');
-            itemEl.className = 'history-item';
-            if (index >= VISIBLE_HISTORY_ITEMS) {
-                itemEl.classList.add('history-hidden');
-            }
-            itemEl.setAttribute('data-id', item.id);
-            itemEl.setAttribute('data-status-code', item.result.status);
-            
-            const date = new Date(item.timestamp);
-            const timeStr = formatTime(date);
-            const displayTime = formatDisplayTime(item.timestamp);
-            
-            let statusClass = 'status-info';
-            let statusText = item.result.status;
-
-            // 先检查是否有错误类型
-            if (item.result.errorType) {
-    // 有错误
-    if (item.result.errorType === 'proxy_auth_failed') {
-        statusClass = 'status-proxy-error';
-        statusText = '代理认证失败';
-    } else if (item.result.errorType === 'proxy_timeout' || item.result.proxyError) {
-        statusClass = 'status-proxy-error';
-        statusText = '504';
-    } else if (item.result.errorType === 'url_timeout') {
-        // 如果是url_timeout错误类型，检查状态码
-        if (item.result.status === 504) {
-            statusClass = 'status-504';
-            statusText = '504';
-        } else {
-            statusClass = 'status-url-error';
-            statusText = '超时';
-        }
-    } else {
-        statusClass = 'status-error';
-        statusText = item.result.status || '错误';
+    historyList.innerHTML = '';
+    
+    if (history.length === 0) {
+        historyList.innerHTML = `
+            <div class="history-item placeholder">
+                <div class="history-url">暂无请求历史</div>
+            </div>`;
+        return;
     }
-} else if (item.result.status >= 200 && item.result.status < 300) {
-                statusClass = 'status-success';
-            } else if (item.result.status >= 300 && item.result.status < 400) {
-                statusClass = 'status-warning';
-            } else if (item.result.status === 504) {
-                statusClass = 'status-504';
+    
+    const historyContainer = document.createElement('div');
+    historyContainer.className = 'history-container';
+    
+    history.forEach((item, index) => {
+        const itemEl = document.createElement('div');
+        itemEl.className = 'history-item';
+        if (index >= VISIBLE_HISTORY_ITEMS) {
+            itemEl.classList.add('history-hidden');
+        }
+        itemEl.setAttribute('data-id', item.id);
+        itemEl.setAttribute('data-status-code', item.result.status);
+        
+        const date = new Date(item.timestamp);
+        const timeStr = formatTime(date);
+        const displayTime = formatDisplayTime(item.timestamp);
+        
+        let statusClass = 'status-info';
+        let statusText = item.result.status;
+
+        // 先检查是否有错误类型
+        if (item.result.errorType) {
+            if (item.result.errorType === 'proxy_auth_failed') {
+                statusClass = 'status-proxy-error';
+                statusText = '代理认证失败';
+            } else if (item.result.errorType === 'proxy_timeout' || item.result.proxyError) {
+                statusClass = 'status-proxy-error';
                 statusText = '504';
-            } else if (item.result.status > 0) {
-                statusClass = 'status-error';
-                statusText = item.result.status;
+            } else if (item.result.errorType === 'url_timeout') {
+                if (item.result.status === 504) {
+                    statusClass = 'status-504';
+                    statusText = '504';
+                } else {
+                    statusClass = 'status-url-error';
+                    statusText = '超时';
+                }
             } else {
                 statusClass = 'status-error';
-                statusText = '错误';
+                statusText = item.result.status || '错误';
             }
-            
-            itemEl.innerHTML = `
-                <div class="history-info">
+        } else if (item.result.status >= 200 && item.result.status < 300) {
+            statusClass = 'status-success';
+        } else if (item.result.status >= 300 && item.result.status < 400) {
+            statusClass = 'status-warning';
+        } else if (item.result.status === 504) {
+            statusClass = 'status-504';
+            statusText = '504';
+        } else if (item.result.status > 0) {
+            statusClass = 'status-error';
+            statusText = item.result.status;
+        } else {
+            statusClass = 'status-error';
+            statusText = '错误';
+        }
+        
+        // 获取方法对应的颜色
+        const methodColors = {
+            'GET': { color: '#17b26a', bg: '#d1f0e1' },
+            'POST': { color: '#ef6820', bg: '#fdede4' },
+            'HEAD': { color: '#ee46bc', bg: '#fde9f7' }
+        };
+        const method = item.config.method || 'GET';
+        const methodStyle = methodColors[method] || methodColors['GET'];
+        
+        // 构建方法标签（放在 URL 前面，带背景色）
+        const methodLabel = `<span class="history-method-badge" style="background-color: ${methodStyle.bg}; color: ${methodStyle.color}; padding: 1px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; flex-shrink: 0;">${method}</span>`;
+        
+        itemEl.innerHTML = `
+            <div class="history-info">
+                <div class="history-url-row">
+                    ${methodLabel}
                     <div class="history-url" title="${item.url}">${item.url}</div>
-                    <div class="history-details">
-                        <span class="history-time" title="${timeStr}">${displayTime}</span>
-                        <span class="status-badge ${statusClass} history-status">${statusText}</span>
-                        <span>${item.result.redirectCount}次重定向</span>
-                        <span>${(item.result.time * 1000).toFixed(0)}ms</span>
-                        <span>${formatBytes(item.result.size)}</span>
-                        ${item.result.proxyUsed ? '<span style="color:var(--warning-color);">代理</span>' : ''}
-                    </div>
                 </div>
-                <div class="history-actions">
-                    <button class="history-fill-btn" title="回填配置">
-                        <i class="fas fa-arrow-left"></i>
-                    </button>
-                    <button class="history-delete-btn" title="删除记录">
-                        <i class="fas fa-times"></i>
-                    </button>
+                <div class="history-details">
+                    <span class="history-time" title="${timeStr}">${displayTime}</span>
+                    <span class="status-badge ${statusClass} history-status">${statusText}</span>
+                    <span>${item.result.redirectCount}次重定向</span>
+                    <span>${(item.result.time * 1000).toFixed(0)}ms</span>
+                    <span>${formatBytes(item.result.size)}</span>
+                    ${item.result.proxyUsed ? '<span style="color:var(--warning-color);">代理</span>' : ''}
                 </div>
-            `;
-            
-            const fillBtn = itemEl.querySelector('.history-fill-btn');
-            fillBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
+            </div>
+            <div class="history-actions">
+                <button class="history-fill-btn" title="回填配置">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <button class="history-delete-btn" title="删除记录">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        const fillBtn = itemEl.querySelector('.history-fill-btn');
+        fillBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            fillFormWithConfig(item.config);
+            addLog(`已加载历史配置: ${item.url}`, 'info');
+            moveHistoryToTop(item.id);
+        });
+        
+        const deleteBtn = itemEl.querySelector('.history-delete-btn');
+        deleteBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            deleteHistoryItem(item.id);
+        });
+        
+        itemEl.addEventListener('click', function(e) {
+            if (!e.target.closest('.history-actions')) {
                 fillFormWithConfig(item.config);
                 addLog(`已加载历史配置: ${item.url}`, 'info');
                 moveHistoryToTop(item.id);
-            });
-            
-            const deleteBtn = itemEl.querySelector('.history-delete-btn');
-            deleteBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                deleteHistoryItem(item.id);
-            });
-            
-            itemEl.addEventListener('click', function(e) {
-                if (!e.target.closest('.history-actions')) {
-                    fillFormWithConfig(item.config);
-                    addLog(`已加载历史配置: ${item.url}`, 'info');
-                    moveHistoryToTop(item.id);
-                }
-            });
-            
-            historyContainer.appendChild(itemEl);
+            }
         });
         
-        if (history.length > VISIBLE_HISTORY_ITEMS) {
-            const toggleBtn = document.createElement('div');
-            toggleBtn.className = 'history-toggle-btn';
-            toggleBtn.innerHTML = `
-                <span>显示全部 (${history.length})</span>
-                <i class="fas fa-chevron-down"></i>
-            `;
-            
-            toggleBtn.addEventListener('click', function() {
-                const hiddenItems = historyContainer.querySelectorAll('.history-hidden');
-                const isHidden = hiddenItems.length > 0;
-                
-                if (isHidden) {
-                    hiddenItems.forEach(item => {
-                        item.classList.remove('history-hidden');
-                    });
-                    toggleBtn.innerHTML = '<span>收起</span><i class="fas fa-chevron-up"></i>';
-                    toggleBtn.classList.add('expanded');
-                } else {
-                    const allItems = historyContainer.querySelectorAll('.history-item');
-                    allItems.forEach((item, index) => {
-                        if (index >= VISIBLE_HISTORY_ITEMS) {
-                            item.classList.add('history-hidden');
-                        }
-                    });
-                    toggleBtn.innerHTML = `<span>显示全部 (${history.length})</span><i class="fas fa-chevron-down"></i>`;
-                    toggleBtn.classList.remove('expanded');
-                }
-            });
-            
-            historyContainer.appendChild(toggleBtn);
-        }
+        historyContainer.appendChild(itemEl);
+    });
+    
+    if (history.length > VISIBLE_HISTORY_ITEMS) {
+        const toggleBtn = document.createElement('div');
+        toggleBtn.className = 'history-toggle-btn';
+        toggleBtn.innerHTML = `
+            <span>显示全部 (${history.length})</span>
+            <i class="fas fa-chevron-down"></i>
+        `;
         
-        const clearAllBtn = document.createElement('div');
-        clearAllBtn.className = 'history-clear-all';
-        clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> 清除所有历史记录';
-        clearAllBtn.addEventListener('click', clearAllHistory);
+        toggleBtn.addEventListener('click', function() {
+            const hiddenItems = historyContainer.querySelectorAll('.history-hidden');
+            const isHidden = hiddenItems.length > 0;
+            
+            if (isHidden) {
+                hiddenItems.forEach(item => {
+                    item.classList.remove('history-hidden');
+                });
+                toggleBtn.innerHTML = '<span>收起</span><i class="fas fa-chevron-up"></i>';
+                toggleBtn.classList.add('expanded');
+            } else {
+                const allItems = historyContainer.querySelectorAll('.history-item');
+                allItems.forEach((item, index) => {
+                    if (index >= VISIBLE_HISTORY_ITEMS) {
+                        item.classList.add('history-hidden');
+                    }
+                });
+                toggleBtn.innerHTML = `<span>显示全部 (${history.length})</span><i class="fas fa-chevron-down"></i>`;
+                toggleBtn.classList.remove('expanded');
+            }
+        });
         
-        historyContainer.appendChild(clearAllBtn);
-        historyList.appendChild(historyContainer);
+        historyContainer.appendChild(toggleBtn);
     }
+    
+    const clearAllBtn = document.createElement('div');
+    clearAllBtn.className = 'history-clear-all';
+    clearAllBtn.innerHTML = '<i class="fas fa-trash"></i> 清除所有历史记录';
+    clearAllBtn.addEventListener('click', clearAllHistory);
+    
+    historyContainer.appendChild(clearAllBtn);
+    historyList.appendChild(historyContainer);
+}
 
     function moveHistoryToTop(id) {
         let history = JSON.parse(localStorage.getItem(HISTORY_STORAGE_KEY)) || [];
@@ -314,27 +391,69 @@ function loadHistory() {
     }
 
     function fillFormWithConfig(config) {
-        document.getElementById('url').value = config.url || '';
-        document.getElementById('host').value = config.host || '';
-        document.getElementById('user-agent').value = config.userAgent || 'Okhttp/3.15';
-        document.getElementById('referer').value = config.referer || '';
-        document.getElementById('other-headers').value = config.otherHeaders || '';
-        document.getElementById('timeout').value = config.timeout || 16;
-        document.getElementById('proxy-address').value = config.proxyAddress || '';
-        document.getElementById('proxy-username').value = config.proxyUsername || '';
-        document.getElementById('proxy-password').value = config.proxyPassword || '';
-        document.getElementById('follow-redirects').value = config.followRedirects || 'auto';
-        document.getElementById('max-redirects').value = config.maxRedirects || 10;
+    document.getElementById('url').value = config.url || '';
+    document.getElementById('host').value = config.host || '';
+    document.getElementById('user-agent').value = config.userAgent || 'Okhttp/3.15';
+    document.getElementById('referer').value = config.referer || '';
+    document.getElementById('other-headers').value = config.otherHeaders || '';
+    document.getElementById('timeout').value = config.timeout || 16;
+    document.getElementById('proxy-address').value = config.proxyAddress || '';
+    document.getElementById('proxy-username').value = config.proxyUsername || '';
+    document.getElementById('proxy-password').value = config.proxyPassword || '';
+    document.getElementById('follow-redirects').value = config.followRedirects || 'auto';
+    document.getElementById('max-redirects').value = config.maxRedirects || 10;
+    
+    // 回填方法
+    if (config.method) {
+        const methodSelect = document.getElementById('method');
+        methodSelect.value = config.method;
         
-        window.scrollTo(0, 0);
-        const urlInput = document.getElementById('url');
-        urlInput.style.backgroundColor = '#e8f5e9';
-        urlInput.style.borderColor = '#4caf50';
-        setTimeout(() => {
-            urlInput.style.backgroundColor = '';
-            urlInput.style.borderColor = '';
-        }, 1000);
+        // 【关键修复】调用 updateMethodStyle 更新样式
+        if (typeof updateMethodStyle === 'function') {
+            updateMethodStyle(methodSelect);
+        } else {
+            // 如果 updateMethodStyle 不在全局作用域，直接执行样式更新逻辑
+            const colorMap = {
+                'GET': { color: '#17b26a', bg: '#d1f0e1', shadowRaw: '46, 125, 50' },
+                'POST': { color: '#ef6820', bg: '#fdede4', shadowRaw: '255, 73, 0' },
+                'HEAD': { color: '#ee46bc', bg: '#fde9f7', shadowRaw: '255, 107, 107' }
+            };
+            const style = colorMap[config.method];
+            if (style) {
+                const methodWrapper = document.getElementById('method-wrapper');
+                if (methodWrapper) {
+                    methodWrapper.style.backgroundColor = style.bg;
+                }
+                methodSelect.style.color = style.color;
+                methodSelect.style.backgroundColor = 'transparent';
+                
+                // 更新外框聚焦颜色
+                const inputGroup = document.querySelector('.url-input-group');
+                if (inputGroup) {
+                    inputGroup.style.setProperty('--focus-color', style.color);
+                    inputGroup.style.setProperty('--focus-shadow', `0 0 0 2px rgba(${style.shadowRaw}, 0.15)`);
+                }
+            }
+        }
+        
+        // 如果是POST，显示请求体
+        if (config.method === 'POST') {
+            document.getElementById('post-body-group').style.display = 'block';
+            document.getElementById('post-body').value = config.postData || '';
+        } else {
+            document.getElementById('post-body-group').style.display = 'none';
+        }
     }
+    
+    window.scrollTo(0, 0);
+    const urlInput = document.getElementById('url');
+    urlInput.style.backgroundColor = '#e8f5e9';
+    urlInput.style.borderColor = '#4caf50';
+    setTimeout(() => {
+        urlInput.style.backgroundColor = '';
+        urlInput.style.borderColor = '';
+    }, 1000);
+}
 
     const sectionToggles = document.querySelectorAll('.compact-group-title');
     sectionToggles.forEach(toggle => {
@@ -915,6 +1034,9 @@ function downloadFile(url, filename) {
         document.getElementById('proxy-password').value = '';
         document.getElementById('follow-redirects').value = 'auto';
         document.getElementById('max-redirects').value = '10';
+        document.getElementById('method').value = 'GET';
+        document.getElementById('post-body-group').style.display = 'none';
+        document.getElementById('post-body').value = '';
 
         responseContainer.style.display = 'none';
         noResponse.style.display = 'block';
@@ -953,14 +1075,31 @@ function downloadFile(url, filename) {
 
 sendBtn.addEventListener('click', function() {
     const url = document.getElementById('url').value.trim();
+    
     if (!url) {
         addLog('请输入直播源URL', 'error');
+        return;
+    }
+    
+    // 检查 URL 格式是否正确（必须以 http:// 或 https:// 开头）
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        addLog('URL格式不正确', 'error');
+        const urlInput = document.getElementById('url');
+        urlInput.style.backgroundColor = '#ffebee';
+        urlInput.style.borderColor = '#f44336';
+        setTimeout(() => {
+            urlInput.style.backgroundColor = '';
+            urlInput.style.borderColor = '';
+        }, 3000);
         return;
     }
 
     loading.classList.add('active');
     responseContainer.style.display = 'none';
     noResponse.style.display = 'none';
+
+    // 获取请求方法
+    const method = document.getElementById('method').value;
 
     const headers = {
         'User-Agent': document.getElementById('user-agent').value,
@@ -981,7 +1120,7 @@ sendBtn.addEventListener('click', function() {
     
     const requestData = {
         url: url,
-        method: 'GET',
+        method: method,
         host: document.getElementById('host').value.trim(),
         timeout: parseInt(document.getElementById('timeout').value),
         proxy: document.getElementById('proxy-address').value.trim(),
@@ -992,8 +1131,19 @@ sendBtn.addEventListener('click', function() {
         headers: headers,
         otherHeaders: otherHeadersText
     };
+
+    // 如果是 POST 方法，添加请求体
+    if (method === 'POST') {
+        const postData = document.getElementById('post-body')?.value || '';
+        requestData.post_data = postData;
+        
+        // 如果用户没有设置 Content-Type，默认使用 application/x-www-form-urlencoded
+        if (!headers['Content-Type'] && !headers['content-type']) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+        }
+    }
     
-    addLog(`正在发送请求: ${url}`, 'info');
+    addLog(`正在发送 ${method} 请求: ${url}`, 'info');
 
     if (requestData.proxy) {
         addLog(`使用SOCKS5代理: ${requestData.proxy}`, 'info');
@@ -1023,7 +1173,7 @@ sendBtn.addEventListener('click', function() {
             }
         });
     })
-.then(data => {
+    .then(data => {
         console.log("API响应数据:", data);
         
         loading.classList.remove('active');
